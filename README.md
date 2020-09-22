@@ -1,1 +1,1 @@
-# lol-stats-online
+# theiryasuo_vs_youryasuo
