@@ -1,4 +1,3 @@
-
 '''
 provides dictionaries and functions to convert between a champions name and their internal id
 
@@ -316,7 +315,7 @@ id_to_champion_dict = {
 }
 
 def champion_to_id(champion):
-	return champion_to_id_dict[champion]
+	return champion_to_id_dict.get(champion, f'UNKNOWN_{champion}')
 
 def id_to_champion(champion_id):
-	return id_to_champion_dict[champion_id]
+	return id_to_champion_dict.get(champion_id, f'UNKNOWN_{champion_id}')

@@ -1,77 +1,58 @@
-from flask import (
-	Blueprint, flash, g, redirect, render_template, request, url_for
-)
-# from werkzeug.exceptions import abort
+from flask import session
+from flask import current_app as app
+
 import sqlite3
 import pandas as pd
 import numpy as np
 
 from lol_online.db import get_db
-
 from . import riot_api, aggregate_stats
 
-lolstats = Blueprint('lolstats', __name__)
 
-@lolstats.route('/api_key')
-def api_key():
-	return riot_api.API_KEY
-
-@lolstats.route('/read_games')
-def read_games():
-	''' lists all games currently in database '''
-	db = get_db()
-	df = pd.read_sql('SELECT * FROM games', con=db)
-	return df.to_html(index=False)
-
-@lolstats.route('/read_players')
-def read_players():
-	''' lists all players currently in database '''
-	db = get_db()
-	df = pd.read_sql('SELECT * FROM players', con=db)
-	return df.to_html(index=False)
-
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-ACCOUNT_NAME = 'vayneofcastamere'
-
-@lolstats.route('/test')
-def test(account_name=ACCOUNT_NAME):
+def populate_dataframes(dataframes_global): #session):
 	create_temporary_tables()
-	account_id = riot_api.get_account_id(account_name)
+	account_id = session['account_id']
 
-	df_games, df_players = collect_games_players_dataframes(account_id)
-	df_p = aggregate_stats.get_player_games(account_id, df_players)
-	df_a, df_e = aggregate_stats.players_by_team(account_id, df_p, df_players)
-	df_pwr = aggregate_stats.winrate_by_champ(df_p)
-	df_awr = aggregate_stats.winrate_by_champ(df_a)
-	df_ewr = aggregate_stats.winrate_by_champ(df_e)
+	df_games, df_players = collect_games_players_dataframes(account_id, session['internal_db_only'])
 
 	oldest = aggregate_stats.oldest_game(df_games)
 	newest = aggregate_stats.newest_game(df_games)
-	# df_p is the players table only including entires played by desired player
 
-	# df_*wr are player, ally, enemy winrates
-	df_pg = aggregate_stats.join_player_games(df_p, df_games)
+	# df_p: players table including only entries plaeyd by player
+	df_p = aggregate_stats.get_player_games(account_id, df_players)
+	# df_a/df_e: players table including entries played by allies/enemies
+	df_a, df_e = aggregate_stats.players_by_team(account_id, df_p, df_players)
 
-	df_brwr = aggregate_stats.blue_red_winrate(df_pg)
+	df_player_champion_winrates = aggregate_stats.winrate_by_champ(df_p)
+	df_ally_champion_winrates = aggregate_stats.winrate_by_champ(df_a)
+	df_enemy_champion_winrates = aggregate_stats.winrate_by_champ(df_e)
 
-	df_gd = aggregate_stats.average_game_durations(df_pg)
-	df_yas = aggregate_stats.their_yasuo_vs_your_yasuo(df_awr, df_ewr)
+	df_joined_player_games = aggregate_stats.join_player_games(df_p, df_games)
 
-	# print(df_pwr, df_pwr.games.sum(), df_pwr.wins.sum(), df_pwr.losses.sum())
-	# print(df_awr, df_awr.games.sum(), df_awr.wins.sum(), df_awr.losses.sum())
-	# print(df_ewr, df_ewr.games.sum(), df_ewr.wins.sum(), df_ewr.losses.sum())
-	drop_temporary_tables()
+	df_blue_red_winrate = aggregate_stats.blue_red_winrate(df_joined_player_games)
 
-	return df_gd.to_html(index_names=False) + aggregate_stats.game_durations_plot(df_pg)
+	df_game_durations = aggregate_stats.average_game_durations(df_joined_player_games)
+	image_game_durations_plot = aggregate_stats.game_durations_plot(df_joined_player_games)
 
+	df_yasuo = aggregate_stats.their_yasuo_vs_your_yasuo(df_ally_champion_winrates, df_enemy_champion_winrates)
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	dataframes_global['df_games'] = df_games
+	dataframes_global['df_players'] = df_players
+	dataframes_global['df_joined_player_games'] = df_joined_player_games
+	dataframes_global['df_player_champion_winrates'] = df_player_champion_winrates
+	dataframes_global['df_ally_champion_winrates'] = df_ally_champion_winrates
+	dataframes_global['df_enemy_champion_winrates'] = df_enemy_champion_winrates
+	dataframes_global['df_blue_red_winrate'] = df_blue_red_winrate
+	dataframes_global['df_game_durations'] = df_game_durations
+	dataframes_global['image_game_durations_plot'] = image_game_durations_plot
+	dataframes_global['df_yasuo'] = df_yasuo
+	dataframes_global['oldest'] = oldest
+	dataframes_global['newest'] = newest
 
-def collect_games_players_dataframes(account_id):
+def collect_games_players_dataframes(account_id, internal_db_only):
 	db = get_db()
 
-	df_games, df_players, df_remakes = build_new_dataframe_tables(account_id)
+	df_games, df_players, df_remakes = build_new_dataframe_tables(account_id, internal_db_only)
 
 	if not df_games.empty:
 		df_games.to_sql('new_games', con=db, if_exists='append', index=True)
@@ -82,7 +63,6 @@ def collect_games_players_dataframes(account_id):
 		df_players.to_sql('players', con=db, if_exists='append', index=False)
 		df_players = df_players.append(pd.read_sql('SELECT * FROM preexisting_players', con=db), ignore_index=True)
 
-		print(pd.read_sql('SELECT * FROM preexisting_players', con=db))
 	else:
 		df_games = pd.read_sql('SELECT * FROM preexisting_games', con=db, index_col='game_id')
 		df_players = pd.read_sql('SELECT * FROM preexisting_players', con=db)
@@ -90,11 +70,10 @@ def collect_games_players_dataframes(account_id):
 	if not df_remakes.empty:
 		df_remakes.to_sql('games', con=db, if_exists='append', index=True)
 
-
 	return df_games, df_players
 
 
-def build_new_dataframe_tables(account_id):
+def build_new_dataframe_tables(account_id, internal_db_only):
 	'''
 	constructs and returns df_games and df_players from game data newly collected from riot
 	these will be used for analysis and then inserted into the database
@@ -106,7 +85,7 @@ def build_new_dataframe_tables(account_id):
 
 	total_games = len(df_games)
 	print('total games:', total_games)
-	df_games = determine_games_to_collect(df_games)
+	df_games = determine_games_to_collect(df_games, internal_db_only)
 	games_to_collect = len(df_games)
 	print('games currently in database:', total_games - games_to_collect)
 	print('games to collect:', len(df_games))
@@ -148,19 +127,10 @@ def build_new_dataframe_tables(account_id):
 
 	df_players = pd.DataFrame({'game_id': game_ids, 'player_id': player_ids, 'champion_id': champion_ids, 'win': wins})
 
-	# df_players.to_csv('df_players.csv')
-	# df_games.to_csv('df_games.csv')
-	# print('df_games')
-	# print(df_games)
-	# print('df_players')
-	# print(df_players)
-	# print('df_remakes')
-	# print(df_remakes)
-
 	return df_games, df_players, df_remakes
 
 
-def determine_games_to_collect(df_games):
+def determine_games_to_collect(df_games, internal_db_only):
 	'''
 	collects games from matchlist already in games table and stores in temporary preexisting_games table
 	returns df consisting of games that still need to be downloaded from api
@@ -184,7 +154,6 @@ def determine_games_to_collect(df_games):
 								''', con=db)
 	df_games = pd.merge(df_games, new_games_ids, left_index=True, right_on='game_id').set_index('game_id')
 	return df_games
-
 
 def create_temporary_tables():
 	'''
@@ -233,8 +202,8 @@ def create_temporary_tables():
 def drop_temporary_tables():
 	''' drops the temporary tables created in create_temporary_tables '''
 	db = get_db()
-	db.execute('DROP TABLE matchlist')
-	db.execute('DROP TABLE preexisting_games')
-	db.execute('DROP TABLE new_games')
-	db.execute('DROP TABLE preexisting_players')
-	db.execute('DROP TABLE new_players')
+	# db.execute('DROP TABLE matchlist')
+	# db.execute('DROP TABLE preexisting_games')
+	# db.execute('DROP TABLE new_games')
+	# db.execute('DROP TABLE preexisting_players')
+	# db.execute('DROP TABLE new_players')

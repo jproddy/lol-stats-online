@@ -1,0 +1,7 @@
+{% extends "user_base.html" %}
+
+{% block content %}
+<h3>{{table_type}}</h3>
+{{length}} entries<br>
+{{table|safe}}
+{% endblock %}

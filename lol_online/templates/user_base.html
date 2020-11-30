@@ -1,0 +1,31 @@
+<!doctype html>
+<html>
+	<head>
+		<title>LoL Stats - {{session['account_name']}}</title>
+	</head>
+	<body>
+		<h2>LoL Stats</h2>
+		account name: {{session['account_name']}}<br>
+		account id: {{session['account_id']}}<br>
+		using only internal database: {{session['internal_db_only']}}<br>
+		{% block home_content %}{% endblock %}<br>
+
+		<a href="{{url_for('show_general_stats')}}">general stats</a><br>
+		<a href="{{url_for('show_player_champion_winrates')}}">player champion winrates</a><br>
+		<a href="{{url_for('show_ally_champion_winrates')}}">ally champion winrates</a><br>
+		<a href="{{url_for('show_enemy_champion_winrates')}}">enemy champion winrates</a><br>
+		<a href="{{url_for('show_ally_enemy_champion_winrate_differential')}}">ally/enemy champion winrate differential</a><br>
+		<a href="{{url_for('show_blue_red_winrate')}}">blue/red winrate</a><br>
+		<a href="{{url_for('show_game_duration_data')}}">game duration data</a><br><br>
+
+		<a href="{{url_for('show_games_database')}}">all games in database [slow]</a><br>
+		<a href="{{url_for('show_players_database')}}">all players in database [very slow]</a><br>
+		<a href="{{url_for('show_players_players')}}">all players in games played by player [slow]</a><br>
+		<a href="{{url_for('show_players_games')}}">all games played by player</a><br>
+		<a href="{{url_for('show_joined_players_games')}}">joined players/games table</a><br><br>
+
+		<a href="{{url_for('logout')}}">switch accounts</a><br><br>
+		
+		{% block content %}{% endblock %}
+	</body>
+</html>

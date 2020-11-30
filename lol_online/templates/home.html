@@ -1,0 +1,22 @@
+<html>
+	<head>
+		<title>LoL Stats</title>
+	</head>
+	<body>
+		{% with messages = get_flashed_messages() %}
+			{% if messages %}
+				{% for message in messages %}
+					{{message}}<br>
+				{% endfor %}
+			{% endif %}
+		{% endwith %}
+
+		<form action="" method="post">
+			<label for="username">lol username: </label><br>
+			<input type="text" id="username" name="account_name"><br>
+			<input type="checkbox" id="internal_db_only" name="internal_db_only">
+			<label for="internal_db_only"> use only internal database</label><br>
+			<input type="submit" id="submit" name="submit">
+		</form>
+	</body>
+</html>

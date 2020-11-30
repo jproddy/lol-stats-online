@@ -1,19 +1,11 @@
 import time
-from collections import Counter
-import numpy as np
 import pandas as pd
-# import matplotlib.pyplot as plt
-# from scipy import stats
-# import sqlite3
 
 from riotwatcher import LolWatcher, ApiError
 from .api_key import API_KEY
 
-# from champions_dict import *
-
-
-# global
 REGION = 'na1'
+
 
 def get_matchlist(account_id, region=REGION):
 	''' retrieves list of all matches for the given account id and returns as a dataframe '''
@@ -37,7 +29,6 @@ def get_matchlist(account_id, region=REGION):
 				break
 		except:
 			pass
-	
 
 	all_matches = [m for match in matches for m in match['matches']]
 	df = pd.DataFrame(all_matches)
@@ -95,7 +86,6 @@ def get_timelines(game_ids, region=REGION):
 	df_tl.index.rename('game_id', inplace=True)
 	df_tl.sort_index(inplace=True)
 	return df_tl
-
 
 def get_forfeits(df, region=REGION):
 	watcher = LolWatcher(API_KEY)
@@ -173,9 +163,3 @@ def get_account_id(account_name):
 	watcher = LolWatcher(API_KEY)
 	account = watcher.summoner.by_name(REGION, account_name)
 	return account['accountId']
-
-def main():
-	pass
-
-if __name__ == '__main__':
-	main()
