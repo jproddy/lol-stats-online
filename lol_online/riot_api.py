@@ -19,7 +19,12 @@ def get_matchlist(account_id, region=REGION):
 	# matches.append(watcher.match.matchlist_by_account(region, account_id, begin_index=0, end_index=10))
 	while True:
 		try:
-			match = watcher.match.matchlist_by_account(region, account_id, queue=valid_queue_ids, begin_index=100*i)
+			match = watcher.match.matchlist_by_account(
+				region,
+				account_id,
+				queue=valid_queue_ids,
+				begin_index=100*i
+			)
 			if match['matches']:
 				matches.append(match)
 				i += 1

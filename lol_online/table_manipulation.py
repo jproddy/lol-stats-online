@@ -57,11 +57,15 @@ def collect_games_players_dataframes(account_id, internal_db_only):
 	if not df_games.empty:
 		df_games.to_sql('new_games', con=db, if_exists='append', index=True)
 		df_games.to_sql('games', con=db, if_exists='append', index=True)
-		df_games = df_games.append(pd.read_sql('SELECT * FROM preexisting_games', con=db, index_col='game_id'))
+		df_games = df_games.append(
+			pd.read_sql('SELECT * FROM preexisting_games', con=db, index_col='game_id')
+		)
 
 		df_players.to_sql('new_players', con=db, if_exists='append', index=False)
 		df_players.to_sql('players', con=db, if_exists='append', index=False)
-		df_players = df_players.append(pd.read_sql('SELECT * FROM preexisting_players', con=db), ignore_index=True)
+		df_players = df_players.append(
+			pd.read_sql('SELECT * FROM preexisting_players', con=db), ignore_index=True
+		)
 
 	else:
 		df_games = pd.read_sql('SELECT * FROM preexisting_games', con=db, index_col='game_id')
@@ -79,9 +83,11 @@ def build_new_dataframe_tables(account_id, internal_db_only):
 	these will be used for analysis and then inserted into the database
 	'''
 
-	# df_games = riot_api.get_matchlist(account_id)
+	df_games = riot_api.get_matchlist(account_id)
+	# SAVE DOWNLOADED MATCHLIST FOR FUTURE DEBUGGING
 	# df_games.to_csv('temp_matchlist.csv')
-	df_games = pd.read_csv('temp_matchlist.csv', index_col=0)
+	# LOAD SAVED MATCHLIST FOR DEBUGGING
+	# df_games = pd.read_csv('temp_matchlist.csv', index_col=0)
 
 	total_games = len(df_games)
 	print('total games:', total_games)
@@ -91,10 +97,16 @@ def build_new_dataframe_tables(account_id, internal_db_only):
 	print('games to collect:', len(df_games))
 
 	if df_games.empty:
-		df_games = pd.DataFrame(columns=['game_id', 'queue', 'duration', 'winner', 'forfeit', 'duration'])
+		df_games = pd.DataFrame(
+			columns=['game_id', 'queue', 'duration', 'winner', 'forfeit', 'duration']
+		)
 		df_games.set_index('game_id', inplace=True)
-		df_players = pd.DataFrame(columns=['game_id', 'player_id', 'champion_id', 'win'])
-		df_remakes = pd.DataFrame(columns=['game_id', 'queue', 'duration', 'winner', 'forfeit', 'duration'])
+		df_players = pd.DataFrame(
+			columns=['game_id', 'player_id', 'champion_id', 'win']
+		)
+		df_remakes = pd.DataFrame(
+			columns=['game_id', 'queue', 'duration', 'winner', 'forfeit', 'duration']
+		)
 		df_remakes.set_index('game_id', inplace=True)
 		return  df_games, df_players, df_remakes
 
@@ -120,12 +132,20 @@ def build_new_dataframe_tables(account_id, internal_db_only):
 	game_ids = []
 	# 10 players per game is hardcoded here
 	for i in range(10):
-		player_ids.extend(list(df_m.participantIdentities.apply(extract_player_id, args=(i,))))
-		champion_ids.extend(list(df_m.participants.apply(extract_champion_id, args=(i,))))
-		wins.extend(list((df_m.participants.apply(extract_team, args=(i,)) == df_games.winner).apply(int)))
+		player_ids.extend(
+			list(df_m.participantIdentities.apply(extract_player_id, args=(i,)))
+		)
+		champion_ids.extend(
+			list(df_m.participants.apply(extract_champion_id, args=(i,)))
+		)
+		wins.extend(
+			list((df_m.participants.apply(extract_team, args=(i,)) == df_games.winner).apply(int))
+		)
 		game_ids.extend(list(df_m.index))
 
-	df_players = pd.DataFrame({'game_id': game_ids, 'player_id': player_ids, 'champion_id': champion_ids, 'win': wins})
+	df_players = pd.DataFrame(
+		{'game_id': game_ids, 'player_id': player_ids, 'champion_id': champion_ids, 'win': wins}
+	)
 
 	return df_games, df_players, df_remakes
 
@@ -137,22 +157,33 @@ def determine_games_to_collect(df_games, internal_db_only):
 	'''
 	db = get_db()
 	pd.Series(data=df_games.index, name='game_id').to_sql('matchlist', db, if_exists='append', index=False)
-	db.execute('''
+	db.execute(
+				'''
 				INSERT INTO preexisting_games(game_id, queue, duration, winner, forfeit, creation)
 				SELECT g.game_id, g.queue, g.duration, g.winner, g.forfeit, g.creation
 				FROM games g INNER JOIN matchlist m ON g.game_id = m.game_id
-				''')
-	db.execute('''
+				'''
+	)
+	db.execute(
+				'''
 				INSERT INTO preexisting_players(game_id, player_id, champion_id, win)
 				SELECT p.game_id, p.player_id, p.champion_id, p.win
 				FROM players p INNER JOIN matchlist m ON p.game_id = m.game_id
-				''')
-	new_games_ids = pd.read_sql('''
+				'''
+	)
+	new_games_ids = pd.read_sql(
+								'''
 								SELECT m.game_id
 								FROM matchlist m LEFT OUTER JOIN preexisting_games pg ON pg.game_id = m.game_id
 								WHERE pg.game_id IS NULL
-								''', con=db)
-	df_games = pd.merge(df_games, new_games_ids, left_index=True, right_on='game_id').set_index('game_id')
+								''', con=db
+	)
+	if internal_db_only:
+		df_games = pd.DataFrame()
+	else:
+		df_games = pd.merge(
+			df_games, new_games_ids, left_index=True, right_on='game_id'
+		).set_index('game_id')
 	return df_games
 
 def create_temporary_tables():

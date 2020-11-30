@@ -36,10 +36,23 @@ def get_player_games(account_id, df_players):
 def players_by_team(account_id, df_p, df_players):
 	# df_np are non-player, df_a are ally, df_e are enemy
 	df_np = df_players[df_players.player_id != account_id]
-	df_a = pd.merge(df_np, df_p, how='inner', left_on=['game_id','win'], right_on=['game_id','win'], suffixes=[None,'_player'])
+	df_a = pd.merge(
+		df_np,
+		df_p,
+		how='inner',
+		left_on=['game_id','win'],
+		right_on=['game_id','win'],
+		suffixes=[None,'_player']
+	)
 	# created inverted_win in order to inner join as pandas cant join on inequalities
 	df_np['inverted_win'] = np.where(df_np.win, 0, 1)
-	df_e = pd.merge(df_np, df_p, how='inner', left_on=['game_id','inverted_win'], right_on=['game_id','win'], suffixes=[None,'_player'])
+	df_e = pd.merge(df_np,
+		df_p,
+		how='inner',
+		left_on=['game_id','inverted_win'],
+		right_on=['game_id','win'],
+		suffixes=[None,'_player']
+	)
 	df_a.drop(['player_id_player', 'champion_id_player'], axis=1, inplace=True)
 	# in df_e, win state is flipped in order to align with current player's perspective
 	df_e.drop(['player_id_player', 'champion_id_player', 'win_player', 'win'], axis=1, inplace=True)
@@ -129,7 +142,12 @@ def game_durations_plot(df_pg):
 	low_bound = lambda x: -x % 5
 	high_bound = lambda x: x - (x % 5) - 10
 
-	plt.xticks(range(low_bound(low_min), high_bound(high_min), 5), range(low_tick(low_min), high_tick(high_min), 5)) # will break for games > 10 hours xD
+	plt.xticks(range(
+		low_bound(low_min),
+		high_bound(high_min), 5),
+		range(low_tick(low_min),
+		high_tick(high_min), 5
+	)) # will break for games > 10 hours xD
 	plt.xlabel('game duration (min)')
 	plt.legend()
 
