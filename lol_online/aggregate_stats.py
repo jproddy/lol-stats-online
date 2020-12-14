@@ -1,8 +1,8 @@
-# import sqlite3
 import pandas as pd
 import numpy as np
 import time
 from scipy import stats
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 import io
@@ -17,23 +17,28 @@ from . import champion_dictionary
 
 
 def oldest_game(df_games):
+	'''returns time of oldest stored game'''
 	ts = df_games.creation.min() // 1000
 	return time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(ts))
 
 def newest_game(df_games):
+	'''returns time of most recent stored game'''
 	ts = df_games.creation.max() // 1000
 	return time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(ts))
 
 def played_unplayed_champions(df_p):
+	'''returns lists of champions that the given play has played previously and has never played'''
 	played = set(df_p.champion_id.apply(champion_dictionary.id_to_champion))
 	unplayed = list(set(champion_dictionary.champion_to_id_dict.keys()) - played)
 	played = sorted(list(played))
 	return played, unplayed
 
 def get_player_games(account_id, df_players):
+	'''extracts desired player's rows from all players'''
 	return df_players[df_players.player_id == account_id]
 
 def players_by_team(account_id, df_p, df_players):
+	'''groups players dataframe into allies and enemies then returns the seperated dataframes'''
 	# df_np are non-player, df_a are ally, df_e are enemy
 	df_np = df_players[df_players.player_id != account_id]
 	df_a = pd.merge(
@@ -60,14 +65,15 @@ def players_by_team(account_id, df_p, df_players):
 	return df_a, df_e
 
 def join_player_games(df_p, df_games):
+	'''merges player and games dataframes on game_id and returns the resulting dataframe'''
 	df_pg = pd.merge(df_games, df_p, how='inner', left_index=True, right_on='game_id')
 	df_pg.set_index('game_id', inplace=True)
 	df_pg.drop(['queue','creation','player_id'], axis=1, inplace=True)
 	df_pg['player_team'] = np.where(df_pg.win, df_pg.winner, np.where(df_pg.winner==100, 200, 100))
-
 	return df_pg
 
 def winrate_by_champ(df):
+	'''calculates winrate per champion and returns the resulting dataframe'''
 	grouped = df.groupby('champion_id').win
 	df_g = pd.DataFrame({'games': grouped.count(), 'wins': grouped.sum()})
 	df_g['losses'] = df_g.games - df_g.wins
@@ -78,6 +84,7 @@ def winrate_by_champ(df):
 	return df_g
 
 def blue_red_winrate(df_pg):
+	'''calculates player winrate depending on side of map and returns a dataframe containing stats'''
 	grouped = df_pg.groupby('player_team')
 	df_brwr = pd.DataFrame({'games': grouped.win.count(), 'wins': grouped.win.sum()})
 	df_brwr['losses'] = df_brwr.games - df_brwr.wins
@@ -87,6 +94,7 @@ def blue_red_winrate(df_pg):
 	return df_brwr
 
 def their_yasuo_vs_your_yasuo(df_awr, df_ewr):
+
 	df_yas = pd.DataFrame({'games_with': df_awr.games, 'winrate_with': df_awr.winrate,
 				'games_against': df_ewr.games, 'winrate_against': df_ewr.winrate})
 	df_yas['delta_winrate'] = df_yas.winrate_with - (1 - df_yas.winrate_against)
@@ -110,7 +118,7 @@ def average_game_durations(df_pg):
 
 	return df_duration
 
-def game_durations_plot(df_pg):
+def game_durations_plot(df_pg, string=False):
 	'''
 	generates figure of game durations with three suplots for all, forfeit and non-forfeit games
 	converts figure to html-rederable image and returns
@@ -118,6 +126,7 @@ def game_durations_plot(df_pg):
 		https://gitlab.com/snippets/1924163
 		https://stackoverflow.com/questions/50728328/python-how-to-show-matplotlib-in-flask
 	'''
+	mpl.use('agg')
 	plt.style.use('ggplot')
 	fig, ax = plt.subplots(3, sharex=True)
 	ax[0].set_title('all')
@@ -155,12 +164,13 @@ def game_durations_plot(df_pg):
 	FigureCanvas(fig).print_png(png_image)
 	png_image_b64_string = 'data:image/png;base64,'
 	png_image_b64_string += base64.b64encode(png_image.getvalue()).decode('utf8')
-	return render_template('test_img.html', image=png_image_b64_string)
+	if string:
+		return png_image_b64_string
+	else:
+		return render_template('test_img.html', image=png_image_b64_string)
 
 def game_durations_subplot(df_pg, axis, bins, forfeit=None):
-	'''
-	fills subplots of figure generated in game_durations_plot
-	'''
+	'''fills subplots of figure generated in game_durations_plot'''
 	if forfeit:
 		df = df_pg[df_pg.forfeit == 1]
 	elif forfeit == False:

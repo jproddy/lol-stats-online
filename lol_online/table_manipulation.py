@@ -9,7 +9,52 @@ from lol_online.db import get_db
 from . import riot_api, aggregate_stats
 
 
-def populate_dataframes(dataframes_global): #session):
+def generate_player_stats(account_name, internal_db_only=True):
+	'''calculates player statistics for api class PlayerStats'''
+	create_temporary_tables()
+
+	account_id = riot_api.get_account_id(account_name)
+
+	df_games, df_players = collect_games_players_dataframes(account_id, internal_db_only)
+
+	oldest = aggregate_stats.oldest_game(df_games)
+	newest = aggregate_stats.newest_game(df_games)
+
+	# df_p: players table including only entries played by player
+	df_p = aggregate_stats.get_player_games(account_id, df_players)
+	# df_a/df_e: players table including entries played by allies/enemies
+	df_a, df_e = aggregate_stats.players_by_team(account_id, df_p, df_players)
+
+	df_player_champion_winrates = aggregate_stats.winrate_by_champ(df_p)
+	df_ally_champion_winrates = aggregate_stats.winrate_by_champ(df_a)
+	df_enemy_champion_winrates = aggregate_stats.winrate_by_champ(df_e)
+
+	df_joined_player_games = aggregate_stats.join_player_games(df_p, df_games)
+
+	df_blue_red_winrate = aggregate_stats.blue_red_winrate(df_joined_player_games)
+
+	df_game_durations = aggregate_stats.average_game_durations(df_joined_player_games)
+	image_game_durations_plot = aggregate_stats.game_durations_plot(df_joined_player_games, string=True)
+
+	df_yasuo = aggregate_stats.their_yasuo_vs_your_yasuo(df_ally_champion_winrates, df_enemy_champion_winrates)
+
+	return {
+		'username': username,
+		'account_id': account_id,
+		'oldest': oldest,
+		'newest': newest,
+		'player_champion_winrates': df_player_champion_winrates.to_dict(orient='index'),
+		'ally_champion_winrates': df_ally_champion_winrates.to_dict(orient='index'),
+		'enemy_champion_winrates': df_enemy_champion_winrates.to_dict(orient='index'),
+		'blue_red_winrate': df_blue_red_winrate.to_dict(orient='index'),
+		'joined_player_games': df_joined_player_games.to_dict(orient='index'),
+		'game_durations': {' '.join(k): v['average_duration'] for k, v in df_game_durations.to_dict(orient='index').items()},
+		'game_durations_plot': image_game_durations_plot,
+		'yasuo_table': df_yasuo.to_dict(orient='index'),
+	}
+
+def populate_dataframes(dataframes_global):
+	'''populates the DATAFRAMES global variable in routes'''
 	create_temporary_tables()
 	account_id = session['account_id']
 
@@ -82,7 +127,6 @@ def build_new_dataframe_tables(account_id, internal_db_only):
 	constructs and returns df_games and df_players from game data newly collected from riot
 	these will be used for analysis and then inserted into the database
 	'''
-
 	df_games = riot_api.get_matchlist(account_id)
 	# SAVE DOWNLOADED MATCHLIST FOR FUTURE DEBUGGING
 	# df_games.to_csv('temp_matchlist.csv')
@@ -158,25 +202,26 @@ def determine_games_to_collect(df_games, internal_db_only):
 	db = get_db()
 	pd.Series(data=df_games.index, name='game_id').to_sql('matchlist', db, if_exists='append', index=False)
 	db.execute(
-				'''
-				INSERT INTO preexisting_games(game_id, queue, duration, winner, forfeit, creation)
-				SELECT g.game_id, g.queue, g.duration, g.winner, g.forfeit, g.creation
-				FROM games g INNER JOIN matchlist m ON g.game_id = m.game_id
-				'''
+		'''
+		INSERT INTO preexisting_games(game_id, queue, duration, winner, forfeit, creation)
+		SELECT g.game_id, g.queue, g.duration, g.winner, g.forfeit, g.creation
+		FROM games g INNER JOIN matchlist m ON g.game_id = m.game_id
+		'''
 	)
 	db.execute(
-				'''
-				INSERT INTO preexisting_players(game_id, player_id, champion_id, win)
-				SELECT p.game_id, p.player_id, p.champion_id, p.win
-				FROM players p INNER JOIN matchlist m ON p.game_id = m.game_id
-				'''
+		'''
+		INSERT INTO preexisting_players(game_id, player_id, champion_id, win)
+		SELECT p.game_id, p.player_id, p.champion_id, p.win
+		FROM players p INNER JOIN matchlist m ON p.game_id = m.game_id
+		'''
 	)
 	new_games_ids = pd.read_sql(
-								'''
-								SELECT m.game_id
-								FROM matchlist m LEFT OUTER JOIN preexisting_games pg ON pg.game_id = m.game_id
-								WHERE pg.game_id IS NULL
-								''', con=db
+		'''
+		SELECT m.game_id
+		FROM matchlist m LEFT OUTER JOIN preexisting_games pg ON pg.game_id = m.game_id
+		WHERE pg.game_id IS NULL
+		''',
+		con=db
 	)
 	if internal_db_only:
 		df_games = pd.DataFrame()
@@ -194,44 +239,55 @@ def create_temporary_tables():
 	new_games are games to be downloaded from riot's api
 	'''
 	db = get_db()
-	db.execute(''' CREATE TEMP TABLE matchlist(game_id INTEGER PRIMARY KEY)''')
-	db.execute('''
-				CREATE TEMP TABLE preexisting_games(
-					game_id INTEGER PRIMARY KEY,
-					queue INTEGER NOT NULL,
-					duration INTEGER NOT NULL,
-					winner INTEGER NOT NULL,
-					forfeit INTEGER NOT NULL,
-					creation INTEGER NOT NULL)
-				''')
-	db.execute('''
-				CREATE TEMP TABLE new_games(
-					game_id INTEGER PRIMARY KEY,
-					queue INTEGER NOT NULL,
-					duration INTEGER NOT NULL,
-					winner INTEGER NOT NULL,
-					forfeit INTEGER NOT NULL,
-					creation INTEGER NOT NULL)
-				''')
-	db.execute('''
-				CREATE TEMP TABLE preexisting_players(
-				game_id INTEGER NOT NULL,
-				player_id TEXT NOT NULL,
-				champion_id INTEGER NOT NULL,
-				win INTEGER NOT NULL,
-				PRIMARY KEY (game_id, player_id))
-				''')
-	db.execute('''
-				CREATE TEMP TABLE new_players(
-				game_id INTEGER NOT NULL,
-				player_id TEXT NOT NULL,
-				champion_id INTEGER NOT NULL,
-				win INTEGER NOT NULL,
-				PRIMARY KEY (game_id, player_id))
-				''')
+	db.execute('CREATE TEMP TABLE matchlist(game_id INTEGER PRIMARY KEY)')
+	db.execute(
+		'''
+		CREATE TEMP TABLE preexisting_games(
+		game_id INTEGER PRIMARY KEY,
+		queue INTEGER NOT NULL,
+		duration INTEGER NOT NULL,
+		winner INTEGER NOT NULL,
+		forfeit INTEGER NOT NULL,
+		creation INTEGER NOT NULL)
+		'''
+	)
+	db.execute(
+		'''
+		CREATE TEMP TABLE new_games(
+		game_id INTEGER PRIMARY KEY,
+		queue INTEGER NOT NULL,
+		duration INTEGER NOT NULL,
+		winner INTEGER NOT NULL,
+		forfeit INTEGER NOT NULL,
+		creation INTEGER NOT NULL)
+		'''
+	)
+	db.execute(
+		'''
+		CREATE TEMP TABLE preexisting_players(
+		game_id INTEGER NOT NULL,
+		player_id TEXT NOT NULL,
+		champion_id INTEGER NOT NULL,
+		win INTEGER NOT NULL,
+		PRIMARY KEY (game_id, player_id))
+		'''
+	)
+	db.execute(
+		'''
+		CREATE TEMP TABLE new_players(
+		game_id INTEGER NOT NULL,
+		player_id TEXT NOT NULL,
+		champion_id INTEGER NOT NULL,
+		win INTEGER NOT NULL,
+		PRIMARY KEY (game_id, player_id))
+		'''
+	)
 
 def drop_temporary_tables():
-	''' drops the temporary tables created in create_temporary_tables '''
+	'''
+	drops the temporary tables created in create_temporary_tables
+	they drop automattically so this does nothing for now
+	'''
 	db = get_db()
 	# db.execute('DROP TABLE matchlist')
 	# db.execute('DROP TABLE preexisting_games')

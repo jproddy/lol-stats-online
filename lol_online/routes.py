@@ -5,11 +5,12 @@ import pandas as pd
 from lol_online.db import get_db
 from . import riot_api, aggregate_stats, table_manipulation
 
+# this is bad.
 DATAFRAMES = {}
 
 
-@app.route('/hello')
-def hello():
+@app.route('/hello_route')
+def hello_route():
 	return 'hello'
 
 @app.route('/api_key')
