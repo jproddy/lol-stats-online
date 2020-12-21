@@ -37,12 +37,11 @@ def get_player_games(account_id, df_players):
 	'''extracts desired player's rows from all players'''
 	return df_players[df_players.player_id == account_id]
 
-def players_by_team(account_id, df_p, df_players):
+def players_by_team(account_id, df_p, df_other_players):
 	'''groups players dataframe into allies and enemies then returns the seperated dataframes'''
 	# df_np are non-player, df_a are ally, df_e are enemy
-	df_np = df_players[df_players.player_id != account_id]
 	df_a = pd.merge(
-		df_np,
+		df_other_players,
 		df_p,
 		how='inner',
 		left_on=['game_id','win'],
@@ -50,8 +49,9 @@ def players_by_team(account_id, df_p, df_players):
 		suffixes=[None,'_player']
 	)
 	# created inverted_win in order to inner join as pandas cant join on inequalities
-	df_np['inverted_win'] = np.where(df_np.win, 0, 1)
-	df_e = pd.merge(df_np,
+	df_other_players['inverted_win'] = np.where(df_other_players.win, 0, 1)
+	df_e = pd.merge(
+		df_other_players,
 		df_p,
 		how='inner',
 		left_on=['game_id','inverted_win'],
@@ -85,16 +85,19 @@ def winrate_by_champ(df):
 
 def blue_red_winrate(df_pg):
 	'''calculates player winrate depending on side of map and returns a dataframe containing stats'''
-	grouped = df_pg.groupby('player_team')
-	df_brwr = pd.DataFrame({'games': grouped.win.count(), 'wins': grouped.win.sum()})
-	df_brwr['losses'] = df_brwr.games - df_brwr.wins
+	grouped = df_pg.groupby(['win', 'winner']).game_id.count()
+	blue = [grouped[1, 100], grouped[0, 200]]
+	red = [grouped[1, 200], grouped[0, 100]]
+	df_brwr = pd.DataFrame([blue, red], index=['blue', 'red'], columns=['wins', 'losses'])
+	df_brwr['games'] = df_brwr.wins + df_brwr.losses
 	df_brwr['winrate'] = df_brwr.wins / df_brwr.games
-	p_value = lambda side: stats.binom_test(side.wins, side.games)
-	df_brwr['p_value'] = df_brwr.apply(p_value, axis=1)
+	df_brwr['p_value'] = df_brwr.apply(
+		lambda x: stats.binom_test(x.wins, x.games), axis=1
+	)
 	return df_brwr
 
 def their_yasuo_vs_your_yasuo(df_awr, df_ewr):
-
+	'''is each champion win more when on your team or on enemy team?'''
 	df_yas = pd.DataFrame({'games_with': df_awr.games, 'winrate_with': df_awr.winrate,
 				'games_against': df_ewr.games, 'winrate_against': df_ewr.winrate})
 	df_yas['delta_winrate'] = df_yas.winrate_with - (1 - df_yas.winrate_against)
@@ -115,7 +118,6 @@ def average_game_durations(df_pg):
 	df_duration['duration'] = df_duration.duration.apply(format_duration)
 	df_duration.rename({'duration':'average_duration'}, axis=1, inplace=True)
 	df_duration.loc[('overall','overall'),:] = format_duration(df.duration.mean())
-
 	return df_duration
 
 def game_durations_plot(df_pg, string=False):
