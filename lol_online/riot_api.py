@@ -1,5 +1,6 @@
-import time
 import pandas as pd
+import time
+from tqdm import tqdm
 
 from riotwatcher import LolWatcher, ApiError
 from .api_key import API_KEY
@@ -20,6 +21,7 @@ def get_matchlist(account_id, region=REGION):
 	valid_queue_ids = [400, 420, 430, 440, 700]
 
 	print('fetching matchlist:')
+	pbar = tqdm(total=float('inf'), mininterval=0.1)
 	while True:
 		try:
 			match = watcher.match.matchlist_by_account(
@@ -32,15 +34,17 @@ def get_matchlist(account_id, region=REGION):
 				matches.append(match)
 				i += 1
 				time.sleep(.1)
-				print((i - 1) * 100, '/ ?')
+				pbar.update(len(match['matches']))
 			else:
 				break
 		except:
 			pass
 
 	all_matches = [m for match in matches for m in match['matches']]
+	pbar.total = len(all_matches)
+	pbar.close()
+
 	df = pd.DataFrame(all_matches)
-	print(len(df), '/', len(df))
 	df.rename({'timestamp':'creation', 'gameId': 'game_id'}, axis=1, inplace=True)
 	df.set_index('game_id', drop=False, inplace=True)
 	df.drop(['season', 'role', 'lane', 'platformId', 'champion'], axis=1, inplace=True)
@@ -54,7 +58,7 @@ def get_timelines(game_ids, region=REGION):
 	failed = []
 
 	print('fetching timelines:')
-	for i, game_id in enumerate(game_ids):
+	for i, game_id in enumerate(tqdm(game_ids)):
 		for _ in range(3):
 			try:
 				timelines.append(watcher.match.timeline_by_match(region, game_id))
@@ -64,10 +68,7 @@ def get_timelines(game_ids, region=REGION):
 				time.sleep(1.5)
 		else:
 			failed.append(game_id)
-		if not i % 50:
-			print(i, '/', len(game_ids))
 		time.sleep(1.5)
-	print(len(game_ids_success), '/', len(game_ids_success))
 	if failed:
 		print('game ids failed:', failed)
 
@@ -102,7 +103,7 @@ def get_matches(df, region=REGION):
 	failed = []
 
 	print('fetching matches:')
-	for i, game_id in enumerate(df.game_id):
+	for i, game_id in enumerate(tqdm(df.game_id)):
 		for _ in range(3):
 			try:
 				matches.append(watcher.match.by_id(region, game_id))
@@ -112,10 +113,7 @@ def get_matches(df, region=REGION):
 				time.sleep(1.5)
 		else:
 			failed.append(game_id)
-		if not i % 50:
-			print(i, '/', len(df))
 		time.sleep(1.5)
-	print(len(game_ids_success), '/', len(game_ids_success))
 	if failed:
 		print('game ids failed:', failed)
 

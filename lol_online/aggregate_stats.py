@@ -154,11 +154,9 @@ def game_durations_plot(df_pg, string=False):
 	high_bound = lambda x: x - (x % 5) - 10
 
 	plt.xticks(range(
-		low_bound(low_min),
-		high_bound(high_min), 5),
-		range(low_tick(low_min),
-		high_tick(high_min), 5
-	)) # will break for games > 10 hours xD
+		low_bound(low_min), high_bound(high_min), 5),
+		range(low_tick(low_min), high_tick(high_min), 5)
+	) # will break for games > 10 hours xD
 	plt.xlabel('game duration (min)')
 	plt.legend()
 
