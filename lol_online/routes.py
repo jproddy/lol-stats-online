@@ -162,7 +162,8 @@ def home():
 def user_home():
 	if 'account_name' in session:
 		if not session.get('populated', False):
-			table_manipulation.populate_dataframes(DATAFRAMES)
+			global DATAFRAMES
+			DATAFRAMES = table_manipulation.generate_player_stats_route(session['account_name'], session['internal_db_only'])
 		return render_template('user_home.html', length=len(DATAFRAMES['df_games']))
 
 	else:
@@ -173,6 +174,5 @@ def logout():
 	# session.pop('account_name', None)
 	# session.pop('internal_db_only', None)
 	session.clear()
-	table_manipulation.drop_temporary_tables()
 	flash('switching account', 'info')
 	return redirect(url_for('home'))

@@ -147,16 +147,14 @@ def game_durations_plot(df_pg, string=False):
 	game_durations_subplot(df_pg, ax[1], bins, False)
 	game_durations_subplot(df_pg, ax[2], bins, True)
 
-	# annoying lambda functions to determine min and max bounds/ticks for x axis
-	low_tick = lambda x: (((x - 1) // 5) + 1) * 5
-	high_tick = lambda x: ((x // 5) * 5) + 5
-	low_bound = lambda x: -x % 5
-	high_bound = lambda x: x - (x % 5) - 10
-
-	plt.xticks(range(
-		low_bound(low_min), high_bound(high_min), 5),
-		range(low_tick(low_min), high_tick(high_min), 5)
-	) # will break for games > 10 hours xD
+	low_label = (low_min + 4) // 5 * 5
+	high_label = high_min // 5 * 5
+	low_tick = -low_min % 5
+	high_tick = low_tick + high_label - low_label
+	plt.xticks(
+		ticks=range(low_tick, high_tick + 5, 5),
+		labels=range(low_label, high_label + 5, 5)
+	)
 	plt.xlabel('game duration (min)')
 	plt.legend()
 
@@ -187,3 +185,5 @@ def game_durations_subplot(df_pg, axis, bins, forfeit=None):
 
 	win.groupby(win_cut).win.count().plot(ax=axis, label='wins', legend=True)
 	loss.groupby(loss_cut).win.count().plot(ax=axis, label='losses', legend=True)
+	# get rid of minor tickmarks--not entirely sure where they're coming from
+	axis.set_xticks([], minor=True)

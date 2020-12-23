@@ -43,6 +43,40 @@ def generate_player_stats(account_name, internal_db_only=True):
 		'yasuo_table': df_yasuo.to_dict(orient='index'),
 	}
 
+def generate_player_stats_route(account_name, internal_db_only=True):
+	'''calculates player statistics for routing--will remove once react is online'''
+	account_id = riot_api.get_account_id(account_name)
+
+	df_player_games, df_other_players = internal_generate_dataframes(account_id)
+	if not internal_db_only:
+		df_player_games, df_other_players = external_generate_dataframes(account_id, df_player_games, df_other_players)
+
+	oldest = aggregate_stats.oldest_game(df_player_games)
+	newest = aggregate_stats.newest_game(df_player_games)
+	df_ally, df_enemy = aggregate_stats.players_by_team(account_id, df_player_games, df_other_players)
+	df_player_champion_winrates = aggregate_stats.winrate_by_champ(df_player_games)
+	df_ally_champion_winrates = aggregate_stats.winrate_by_champ(df_ally)
+	df_enemy_champion_winrates = aggregate_stats.winrate_by_champ(df_enemy)
+	df_blue_red_winrate = aggregate_stats.blue_red_winrate(df_player_games)
+	df_game_durations = aggregate_stats.average_game_durations(df_player_games)
+	image_game_durations_plot = aggregate_stats.game_durations_plot(df_player_games, string=False)
+	df_yasuo = aggregate_stats.their_yasuo_vs_your_yasuo(df_ally_champion_winrates, df_enemy_champion_winrates)
+
+	return {
+		'df_games': df_player_games,
+		'df_players': df_other_players,
+		'df_joined_player_games': df_player_games,
+		'df_player_champion_winrates': df_player_champion_winrates,
+		'df_ally_champion_winrates': df_ally_champion_winrates,
+		'df_enemy_champion_winrates': df_enemy_champion_winrates,
+		'df_blue_red_winrate': df_blue_red_winrate,
+		'df_game_durations': df_game_durations,
+		'image_game_durations_plot': image_game_durations_plot,
+		'df_yasuo': df_yasuo,
+		'oldest': oldest,
+		'newest': newest,
+	}
+
 def internal_generate_dataframes(account_id):
 	'''generate dataframes using games/players stored in database'''
 	db = get_db()
